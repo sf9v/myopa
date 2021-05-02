@@ -11,7 +11,7 @@ import (
 )
 
 func TestEngine(t *testing.T) {
-	defaultQuery := "data.example.authz.allow = true"
+	defaultQuery := "data.example.allow = true"
 	unknowns := []string{
 		"data.pages",
 		"data.page_managers",
@@ -72,7 +72,7 @@ func TestEngine(t *testing.T) {
 				"user": "user-1234",
 			},
 			defined:   true,
-			exprCount: 3,
+			exprCount: 2,
 		},
 		{
 			name:  "page admin is allowed to delete the page",
@@ -86,7 +86,7 @@ func TestEngine(t *testing.T) {
 				"user": "user-1234",
 			},
 			defined:   true,
-			exprCount: 4,
+			exprCount: 3,
 		},
 	}
 

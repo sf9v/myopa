@@ -1,4 +1,4 @@
-package example.authz
+package example
 
 # actions: create, read, update, delete
 # types: page, product
@@ -6,42 +6,49 @@ package example.authz
 
 default allow = false
 
-# any non-anonymous user can create a page
-allow {
-	input.action == "create"
-	input.object.type == "page"
-	input.user != "anon"
+is_anon {
+	input.user == "anon"
 }
 
-# any user can a read page
+# non-anon users can create a page
+allow {
+	not is_anon
+
+	input.action == "create"
+	input.object.type == "page"
+}
+
+# anyown can read any page
 allow {
 	input.action == "read"
 	input.object.type == "page"
 }
 
-# only a page manager can update page
+# page managers can update the page
 allow {
+	not is_anon
+
 	input.action == "update"
 	input.object.type == "page"
-
-	page := data.pages[_]
-	page.id == input.object.id
+	page_id := input.object.id
+	user_id := input.user
 
 	page_manager := data.page_managers[_]
-	page_manager.page_id == page.id
-	page_manager.user_id == input.user
+	page_manager.page_id == page_id
+	page_manager.user_id == user_id
 }
 
-# only page admins can delete a page
+# page admins can delete the page
 allow {
+	not is_anon
+
     input.action == "delete"
     input.object.type == "page"
-
-    page := data.pages[_]
-    page.id == input.object.id
+	page_id := input.object.id
+	user_id := input.user
 
     page_manager := data.page_managers[_]
-    page_manager.page_id == page.id
-    page_manager.user_id == input.user
+    page_manager.page_id == page_id
+    page_manager.user_id == user_id
     page_manager.role == "admin"
 }
