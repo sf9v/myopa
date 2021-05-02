@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -36,7 +37,7 @@ func TestEngine(t *testing.T) {
 			defined: false,
 		},
 		{
-			name:  "an auth user is allowed create a page",
+			name:  "user is allowed create page",
 			query: defaultQuery,
 			input: myopa.M{
 				"action": "create",
@@ -48,7 +49,7 @@ func TestEngine(t *testing.T) {
 			defined: true,
 		},
 		{
-			name:  "all user can read a page",
+			name:  "all user is allowed read page",
 			query: defaultQuery,
 			input: myopa.M{
 				"action": "read",
@@ -61,7 +62,7 @@ func TestEngine(t *testing.T) {
 			defined: true,
 		},
 		{
-			name:  "a page manager is allowed to update the page",
+			name:  "any page manager is allowed to update page",
 			query: defaultQuery,
 			input: myopa.M{
 				"action": "update",
@@ -72,10 +73,10 @@ func TestEngine(t *testing.T) {
 				"user": "user-1234",
 			},
 			defined:   true,
-			exprCount: 2,
+			exprCount: 6,
 		},
 		{
-			name:  "page admin is allowed to delete the page",
+			name:  "only a page admin is allowed to delete page",
 			query: defaultQuery,
 			input: myopa.M{
 				"action": "delete",
@@ -99,6 +100,7 @@ func TestEngine(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tc.defined, result.Defined)
 			assert.Len(t, result.Exprs, tc.exprCount)
+			spew.Dump(result.Exprs)
 		})
 	}
 }

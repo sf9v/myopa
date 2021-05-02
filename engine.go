@@ -24,9 +24,12 @@ type Result struct {
 
 // Expr is an expression
 type Expr struct {
+	// Op is the operator
 	Op Op
-	L  Val
-	R  Val
+	// L is the l-value
+	L Val
+	// R is the r-value
+	R Val
 }
 
 // Op is an operator

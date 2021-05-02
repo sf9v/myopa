@@ -1,54 +1,52 @@
 package example
 
-# actions: create, read, update, delete
-# types: page, product
-# page manager roles: admin, editor
-
 default allow = false
 
+# objects: page, post
+# page roles: anon, admin, editor
+# actions: create, read, update, delete
+
+page_role_grants = {
+	"admin": {
+		"page": ["read", "update", "delete"],
+		"post": ["create", "read", "update", "delete"],
+	},
+	"editor": {
+		"page": ["read", "update"],
+		"post": ["create", "read", "update", "delete"],
+	},
+}
+
+# is role granted to perform action on object
+is_page_role_granted(role, action, object) {
+	page_role_grants[role][object][_] == action
+}
+
+# is user anonymous
 is_anon {
 	input.user == "anon"
 }
 
-# non-anon users can create a page
+# allow users to create page
 allow {
 	not is_anon
 
+	input.object.type == "page"
 	input.action == "create"
-	input.object.type == "page"
 }
 
-# anyown can read any page
+# allow all users to read page
 allow {
-	input.action == "read"
 	input.object.type == "page"
+	input.action == "read"
 }
 
-# page managers can update the page
+# allow users to perform the the allowed action on their role
 allow {
 	not is_anon
-
-	input.action == "update"
-	input.object.type == "page"
-	page_id := input.object.id
-	user_id := input.user
 
 	page_manager := data.page_managers[_]
-	page_manager.page_id == page_id
-	page_manager.user_id == user_id
-}
-
-# page admins can delete the page
-allow {
-	not is_anon
-
-    input.action == "delete"
-    input.object.type == "page"
-	page_id := input.object.id
-	user_id := input.user
-
-    page_manager := data.page_managers[_]
-    page_manager.page_id == page_id
-    page_manager.user_id == user_id
-    page_manager.role == "admin"
+	page_manager.page_id == input.object.id
+	page_manager.user_id == input.user
+	is_page_role_granted(page_manager.role, input.action, input.object.type)
 }
