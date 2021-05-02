@@ -2,7 +2,6 @@ package myopa
 
 import (
 	"context"
-	"io/ioutil"
 	"strings"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -13,7 +12,15 @@ import (
 // Engine is an OPA engine
 type Engine struct {
 	policyFile string
-	policy     []byte
+	module     []byte
+}
+
+// New reads a policy file and returns a new engine
+func New(policyFile string, module []byte) *Engine {
+	return &Engine{
+		policyFile: string(policyFile),
+		module:     module,
+	}
 }
 
 // Result is a compilation result
@@ -32,7 +39,7 @@ type Expr struct {
 	R Val
 }
 
-// Op is an operator
+// Op is an expr operator
 type Op int
 
 func (op Op) String() string {
@@ -70,43 +77,27 @@ const (
 	VTKeyValue
 )
 
-// M is an alias to map of interfaces
-type M map[string]interface{}
-
-// New reads a policy file and returns a new engine
-func New(policyFile string) (*Engine, error) {
-	policy, err := ioutil.ReadFile(policyFile)
-	if err != nil {
-		return nil, errors.Wrap(err, "read policy file")
-	}
-
-	return &Engine{
-		policyFile: policyFile,
-		policy:     policy,
-	}, nil
-}
-
 // Compile compiles the query
 func (e *Engine) Compile(ctx context.Context, query string,
-	unknowns []string, input M) (Result, error) {
+	unknowns []string, input interface{}) (Result, error) {
 	rg := rego.New(
 		rego.Query(query),
-		rego.Module(e.policyFile, string(e.policy)),
+		rego.Module(e.policyFile, string(e.module)),
 		rego.Input(input),
 		rego.Unknowns(unknowns),
 	)
 
-	pq, err := rg.Partial(ctx)
+	pqs, err := rg.Partial(ctx)
 	if err != nil {
-		return Result{}, err
+		return Result{}, errors.Wrap(err, "partial eval")
 	}
 
-	if len(pq.Queries) == 0 {
+	if len(pqs.Queries) == 0 {
 		// always deny
 		return Result{Defined: false}, nil
 	}
 
-	return processQuery(pq.Queries)
+	return processQuery(pqs.Queries)
 }
 
 func processQuery(queries []ast.Body) (Result, error) {

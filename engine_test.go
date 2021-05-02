@@ -2,6 +2,7 @@ package myopa_test
 
 import (
 	"context"
+	"io/ioutil"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/sf9v/myopa"
 )
+
+type M map[string]interface{}
 
 func TestEngine(t *testing.T) {
 	defaultQuery := "data.example.allow = true"
@@ -19,16 +22,16 @@ func TestEngine(t *testing.T) {
 	tests := []struct {
 		name      string
 		query     string
-		input     myopa.M
+		input     M
 		defined   bool
 		exprCount int
 	}{
 		{
 			name:  "anon user is not allowed to create page",
 			query: defaultQuery,
-			input: myopa.M{
+			input: M{
 				"action": "create",
-				"object": myopa.M{
+				"object": M{
 					"type": "page",
 				},
 				"user": "anon",
@@ -38,9 +41,9 @@ func TestEngine(t *testing.T) {
 		{
 			name:  "user is allowed create page",
 			query: defaultQuery,
-			input: myopa.M{
+			input: M{
 				"action": "create",
-				"object": myopa.M{
+				"object": M{
 					"type": "page",
 				},
 				"user": "user-1234",
@@ -50,9 +53,9 @@ func TestEngine(t *testing.T) {
 		{
 			name:  "all user is allowed read page",
 			query: defaultQuery,
-			input: myopa.M{
+			input: M{
 				"action": "read",
-				"object": myopa.M{
+				"object": M{
 					"type": "page",
 					"id":   "page-1234",
 				},
@@ -63,9 +66,9 @@ func TestEngine(t *testing.T) {
 		{
 			name:  "any page manager is allowed to update page",
 			query: defaultQuery,
-			input: myopa.M{
+			input: M{
 				"action": "update",
-				"object": myopa.M{
+				"object": M{
 					"type": "page",
 					"id":   "page-1234",
 				},
@@ -77,9 +80,9 @@ func TestEngine(t *testing.T) {
 		{
 			name:  "only a page admin is allowed to delete page",
 			query: defaultQuery,
-			input: myopa.M{
+			input: M{
 				"action": "delete",
-				"object": myopa.M{
+				"object": M{
 					"type": "page",
 					"id":   "page-1234",
 				},
@@ -90,9 +93,11 @@ func TestEngine(t *testing.T) {
 		},
 	}
 
-	e, err := myopa.New("example.rego")
+	policyFile := "example.rego"
+	b, err := ioutil.ReadFile(policyFile)
 	require.NoError(t, err)
 
+	e := myopa.New(policyFile, b)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := e.Compile(context.TODO(), defaultQuery, unknowns, tc.input)
@@ -104,17 +109,20 @@ func TestEngine(t *testing.T) {
 }
 
 func BenchmarkEngine(b *testing.B) {
-	e, err := myopa.New("example.rego")
+	policyFile := "example.rego"
+	module, err := ioutil.ReadFile(policyFile)
 	require.NoError(b, err)
+
+	e := myopa.New(policyFile, module)
 
 	defaultQuery := "data.example.authz.allow = true"
 	unknowns := []string{
 		"data.pages",
 		"data.page_managers",
 	}
-	input := myopa.M{
+	input := M{
 		"action": "create",
-		"object": myopa.M{
+		"object": M{
 			"type": "page",
 		},
 		"user": "anon",
