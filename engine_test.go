@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -100,7 +99,6 @@ func TestEngine(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tc.defined, result.Defined)
 			assert.Len(t, result.Exprs, tc.exprCount)
-			spew.Dump(result.Exprs)
 		})
 	}
 }
