@@ -2,17 +2,24 @@ package example.authz
 
 # actions: create, read, update, delete
 # types: page, product
-# page roles: admin, editor
+# page manager roles: admin, editor
 
 default allow = false
 
-# any user can a page
+# any non-anonymous user can create a page
+allow {
+	input.action == "create"
+	input.object.type == "page"
+	input.user != "anon"
+}
+
+# any user can a read page
 allow {
 	input.action == "read"
 	input.object.type == "page"
 }
 
-# only a page manager can update a page
+# only a page manager can update page
 allow {
 	input.action == "update"
 	input.object.type == "page"
@@ -25,6 +32,7 @@ allow {
 	page_manager.user_id == input.user
 }
 
+# only page admins can delete a page
 allow {
     input.action == "delete"
     input.object.type == "page"

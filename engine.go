@@ -3,17 +3,74 @@ package myopa
 import (
 	"context"
 	"io/ioutil"
+	"strings"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/pkg/errors"
 )
 
+// Engine is an OPA engine
 type Engine struct {
 	policyFile string
 	policy     []byte
 }
 
+// Result is a compilation result
+type Result struct {
+	Defined bool
+	Exprs   []*Expr
+}
+
+// Expr is an expression
+type Expr struct {
+	Op Op
+	L  Val
+	R  Val
+}
+
+// Op is an operator
+type Op int
+
+func (op Op) String() string {
+	return [...]string{
+		"invalid",
+		"equal",
+	}[op]
+}
+
+// List of operators
+const (
+	OpEq Op = iota + 1
+)
+
+// Val is a value
+type Val struct {
+	T VT
+	V interface{}
+}
+
+// VT is a value type
+type VT int
+
+func (vt VT) String() string {
+	return [...]string{
+		"invalid",
+		"constant",
+		"key-value",
+	}[vt]
+}
+
+// List of value types
+const (
+	VTConstant VT = iota + 1
+	VTKeyValue
+)
+
+// M is an alias to map of interfaces
+type M map[string]interface{}
+
+// New reads a policy file and returns a new engine
 func New(policyFile string) (*Engine, error) {
 	policy, err := ioutil.ReadFile(policyFile)
 	if err != nil {
@@ -26,14 +83,9 @@ func New(policyFile string) (*Engine, error) {
 	}, nil
 }
 
-type Result struct {
-	Op Op
-	L  Val
-	R  Val
-}
-
+// Compile compiles the query
 func (e *Engine) Compile(ctx context.Context, query string,
-	unknowns []string, input M) ([]*Result, error) {
+	unknowns []string, input M) (Result, error) {
 	rg := rego.New(
 		rego.Query(query),
 		rego.Module(e.policyFile, string(e.policy)),
@@ -43,76 +95,100 @@ func (e *Engine) Compile(ctx context.Context, query string,
 
 	pq, err := rg.Partial(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "partial evaluation")
+		return Result{}, err
 	}
 
 	if len(pq.Queries) == 0 {
-		rs, err := rg.Eval(ctx)
-		if err != nil {
-			return nil, errors.Wrap(err, "eval")
-		}
-
-		if len(rs) != 1 || len(rs[0].Expressions) != 1 {
-			return nil, errors.New("empty result set")
-		}
+		// always deny
+		return Result{Defined: false}, nil
 	}
 
-	results := []*Result{}
-	for _, query := range pq.Queries {
-		for _, expr := range query {
-			if !expr.IsCall() {
+	return processQuery(pq.Queries)
+}
+
+func processQuery(queries []ast.Body) (Result, error) {
+	exprs := []*Expr{}
+	for _, query := range queries {
+		if len(query) == 0 {
+			// always allow
+			return Result{Defined: true}, nil
+		}
+
+		for _, astExpr := range query {
+			if !astExpr.IsCall() {
 				continue
 			}
 
-			expectNumOps := 2
-			gotNumOps := len(expr.Operands())
-			if gotNumOps != expectNumOps {
-				return nil, errors.Errorf("invalid expression: expecting %d operands but got %d", expectNumOps, gotNumOps)
+			expectOps := 2
+			gotOps := len(astExpr.Operands())
+			if gotOps != expectOps {
+				return Result{}, errors.Errorf("invalid expression: expecting %d operands but got %d", expectOps, gotOps)
 			}
 
 			// operator
 			var op Op
-			switch expr.Operator().String() {
+			switch astExpr.Operator().String() {
 			default:
 				op = OpEq
 			}
 
-			result := &Result{Op: op}
-			for i, term := range expr.Operands() {
+			expr := &Expr{Op: op}
+			for i, term := range astExpr.Operands() {
 				var val Val
 				if ast.IsConstant(term.Value) {
 					v, err := ast.JSON(term.Value)
 					if err != nil {
-						return nil, errors.Wrap(err, "convert term value to json")
+						return Result{}, errors.Wrap(err, "convert term value to json")
 					}
 
-					val = Val{
-						T: VTConstant,
-						V: v,
-					}
+					val = Val{T: VTConstant, V: v}
 				} else {
 					processedTerm := processTerm(term.String())
 					if processedTerm == nil {
-						return results, nil
+						return Result{}, nil
 					}
 
-					val = Val{
-						T: VTKeyValue,
-						V: processedTerm,
-					}
+					val = Val{T: VTKeyValue, V: processedTerm}
 				}
 
 				// we only expect two operands
 				if i == 0 {
-					result.L = val
+					expr.L = val
 				} else if i == 1 {
-					result.R = val
+					expr.R = val
 				}
 			}
 
-			results = append(results, result)
+			exprs = append(exprs, expr)
 		}
 	}
 
-	return results, nil
+	return Result{
+		Defined: true,
+		Exprs:   exprs,
+	}, nil
+}
+
+func processTerm(query string) []string {
+	splitQ := strings.Split(query, ".")
+	var result []string
+	for _, term := range splitQ {
+		result = append(result, removeOpenBrace(term))
+	}
+
+	if result == nil {
+		return nil
+	}
+
+	indexName := result[1]
+	fieldName := result[2]
+	if len(result) > 2 {
+		fieldName = strings.Join(result[2:], ".")
+	}
+
+	return []string{indexName, fieldName}
+}
+
+func removeOpenBrace(input string) string {
+	return strings.Split(input, "[")[0]
 }
