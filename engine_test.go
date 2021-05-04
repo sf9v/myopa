@@ -20,14 +20,12 @@ func TestEngine(t *testing.T) {
 		"data.page_managers",
 	}
 	tests := []struct {
-		name      string
 		query     string
 		input     M
 		defined   bool
 		exprCount int
 	}{
 		{
-			name:  "anon user is not allowed to create page",
 			query: defaultQuery,
 			input: M{
 				"action": "create",
@@ -39,7 +37,6 @@ func TestEngine(t *testing.T) {
 			defined: false,
 		},
 		{
-			name:  "user is allowed create page",
 			query: defaultQuery,
 			input: M{
 				"action": "create",
@@ -51,7 +48,6 @@ func TestEngine(t *testing.T) {
 			defined: true,
 		},
 		{
-			name:  "all user is allowed read page",
 			query: defaultQuery,
 			input: M{
 				"action": "read",
@@ -64,7 +60,6 @@ func TestEngine(t *testing.T) {
 			defined: true,
 		},
 		{
-			name:  "any page manager is allowed to update page",
 			query: defaultQuery,
 			input: M{
 				"action": "update",
@@ -78,7 +73,6 @@ func TestEngine(t *testing.T) {
 			exprCount: 6,
 		},
 		{
-			name:  "only a page admin is allowed to delete page",
 			query: defaultQuery,
 			input: M{
 				"action": "delete",
@@ -99,12 +93,10 @@ func TestEngine(t *testing.T) {
 
 	e := myopa.New(policyFile, b)
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := e.Compile(context.TODO(), defaultQuery, unknowns, tc.input)
-			require.NoError(t, err)
-			assert.Equal(t, tc.defined, result.Defined)
-			assert.Len(t, result.Exprs, tc.exprCount)
-		})
+		result, err := e.Compile(context.TODO(), defaultQuery, tc.input, unknowns...)
+		require.NoError(t, err)
+		assert.Equal(t, tc.defined, result.Defined)
+		assert.Len(t, result.Exprs, tc.exprCount)
 	}
 }
 
@@ -128,7 +120,7 @@ func BenchmarkEngine(b *testing.B) {
 		"user": "anon",
 	}
 	for i := 0; i < b.N; i++ {
-		_, err = e.Compile(context.TODO(), defaultQuery, unknowns, input)
+		_, err = e.Compile(context.TODO(), defaultQuery, input, unknowns...)
 		require.NoError(b, err)
 	}
 }

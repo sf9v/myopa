@@ -31,55 +31,61 @@ type Result struct {
 
 // Expr is an expression
 type Expr struct {
-	// Op is the operator
-	Op Op
-	// L is the l-value
-	L Val
-	// R is the r-value
-	R Val
+	// Operator is the operator
+	Operator Operator
+	Left     *Operand
+	Right    *Operand
 }
 
-// Op is an expr operator
-type Op int
+type Operator int
 
-func (op Op) String() string {
+const (
+	OperatorEq Operator = iota + 1
+)
+
+func (op Operator) String() string {
 	return [...]string{
 		"invalid",
 		"equal",
 	}[op]
 }
 
-// List of operators
-const (
-	OpEq Op = iota + 1
-)
+func strToOp(s string) Operator {
+	switch s {
+	case "eq":
+		return OperatorEq
+	}
 
-// Val is a value
-type Val struct {
-	T VT
+	return Operator(0)
+}
+
+// Val is an expression value
+type Operand struct {
+	// T is the operand type
+	T OperandType
+	// V is the operand value
 	V interface{}
 }
 
-// VT is a value type
-type VT int
+// OperandType is a value type
+type OperandType int
 
-func (vt VT) String() string {
+// List of operand types
+const (
+	OperandTypeConstant OperandType = iota + 1
+	OperandTypeIndexField
+)
+
+func (vt OperandType) String() string {
 	return [...]string{
 		"invalid",
 		"constant",
-		"key-value",
+		"index-field",
 	}[vt]
 }
 
-// List of value types
-const (
-	VTConstant VT = iota + 1
-	VTKeyValue
-)
-
 // Compile compiles the query
-func (e *Engine) Compile(ctx context.Context, query string,
-	unknowns []string, input interface{}) (Result, error) {
+func (e *Engine) Compile(ctx context.Context, query string, input interface{}, unknowns ...string) (Result, error) {
 	rg := rego.New(
 		rego.Query(query),
 		rego.Module(e.policyFile, string(e.module)),
@@ -94,7 +100,7 @@ func (e *Engine) Compile(ctx context.Context, query string,
 
 	if len(pqs.Queries) == 0 {
 		// always deny
-		return Result{Defined: false}, nil
+		return Result{}, nil
 	}
 
 	return processQuery(pqs.Queries)
@@ -113,47 +119,40 @@ func processQuery(queries []ast.Body) (Result, error) {
 				continue
 			}
 
-			expectOps := 2
 			gotOps := len(astExpr.Operands())
-			if gotOps != expectOps {
-				return Result{}, errors.Errorf("invalid expression: expecting %d operands but got %d", expectOps, gotOps)
+			if gotOps != 2 {
+				return Result{}, errors.Errorf("invalid expression: expecting 2 operands but got %d", gotOps)
 			}
 
-			// operator
-			var op Op
-			switch astExpr.Operator().String() {
-			default:
-				op = OpEq
-			}
-
-			expr := &Expr{Op: op}
+			var left, right *Operand
 			for i, term := range astExpr.Operands() {
-				var val Val
+				var operand *Operand
 				if ast.IsConstant(term.Value) {
 					v, err := ast.JSON(term.Value)
 					if err != nil {
 						return Result{}, errors.Wrap(err, "convert term value to json")
 					}
-
-					val = Val{T: VTConstant, V: v}
+					operand = &Operand{T: OperandTypeConstant, V: v}
 				} else {
 					processedTerm := processTerm(term.String())
 					if processedTerm == nil {
 						return Result{}, nil
 					}
-
-					val = Val{T: VTKeyValue, V: processedTerm}
+					operand = &Operand{T: OperandTypeIndexField, V: processedTerm}
 				}
 
-				// we only expect two operands
-				if i == 0 {
-					expr.L = val
-				} else if i == 1 {
-					expr.R = val
+				if i == 1 {
+					left = operand
+				} else {
+					right = operand
 				}
 			}
 
-			exprs = append(exprs, expr)
+			exprs = append(exprs, &Expr{
+				Operator: strToOp(astExpr.Operator().String()),
+				Left:     left,
+				Right:    right,
+			})
 		}
 	}
 
@@ -170,12 +169,7 @@ func processTerm(query string) []string {
 		result = append(result, removeOpenBrace(term))
 	}
 
-	if result == nil {
-		return nil
-	}
-
-	indexName := result[1]
-	fieldName := result[2]
+	indexName, fieldName := result[1], result[2]
 	if len(result) > 2 {
 		fieldName = strings.Join(result[2:], ".")
 	}
