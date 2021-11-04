@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sf9v/myopa"
+	"github.com/stevenferrer/myopa"
 )
 
 type M map[string]interface{}

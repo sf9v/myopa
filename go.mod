@@ -1,4 +1,4 @@
-module github.com/sf9v/myopa
+module github.com/stevenferrer/myopa
 
 go 1.16
 
